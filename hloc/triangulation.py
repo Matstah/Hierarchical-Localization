@@ -1,6 +1,7 @@
 import argparse
 import logging
 from pathlib import Path
+import shutil
 from tqdm import tqdm
 import h5py
 import numpy as np
@@ -8,17 +9,63 @@ import subprocess
 import pprint
 
 from .utils.read_write_model import (
-        read_cameras_binary, read_images_binary, CAMERA_MODEL_NAMES)
+        Camera, read_cameras_binary, read_cameras_text, 
+        read_images_binary, read_images_text, CAMERA_MODEL_NAMES,
+         write_images_binary, write_points3d_binary, Image)
 from .utils.database import COLMAPDatabase
 from .utils.parsers import names_to_pair
 
+def create_empty_model_from_binary(reference_model, empty_model):
+    shutil.copy(reference_model / 'cameras.bin', empty_model)
+    write_points3d_binary(dict(), empty_model / 'points3D.bin')
+    images = read_images_binary(str(reference_model / 'images.bin'))
+    images_empty = dict()
+    for id_, image in images.items():
+        image = image._asdict()
+        image['xys'] = np.zeros((0, 2), float)
+        image['point3D_ids'] = np.full(0, -1, int)
+        images_empty[id_] = Image(**image)
+    write_images_binary(images_empty, empty_model / 'images.bin')
+
+
+def create_empty_model_from_text(reference_model, empty_model):
+    # remove comment header from cam file.
+    with open((reference_model / 'cameras.txt'), 'r') as f:
+        raw_cameras = f.readlines()[3 :]
+    with open((empty_model / 'cameras.txt'), 'w') as f:
+        for raw_line in raw_cameras:
+            f.write('%s\n' % raw_line)
+
+    # remove all keypoints in image files = delete every second row
+    with open((reference_model / 'images.txt'), 'r') as f:
+        raw_images = f.readlines()[4 :]
+    with open((empty_model / 'images.txt'), 'w') as f:
+        for raw_line in raw_images[:: 2]:
+            f.write('%s\n' % raw_line)
+
+    # create empty points3D.txt file
+    with open((empty_model / 'points3D.txt'), 'w') as f:
+        pass
+
+
+def create_empty_model(reference_model, empty_model):
+    print('Create the empty model from reference...')
+    empty_model.mkdir(exist_ok=True)
+    if (reference_model / 'cameras.txt').exists():
+        create_empty_model_from_text(reference_model, empty_model)
+    else:
+        create_empty_model_from_binary(reference_model, empty_model)
 
 def create_db_from_model(empty_model, database_path):
     if database_path.exists():
         logging.warning('Database already exists.')
 
-    cameras = read_cameras_binary(str(empty_model / 'cameras.bin'))
-    images = read_images_binary(str(empty_model / 'images.bin'))
+    if (empty_model / 'cameras.bin').exists():
+        cameras = read_cameras_binary(str(empty_model / 'cameras.bin'))
+        images = read_images_binary(str(empty_model / 'images.bin'))
+    else:
+        cameras = read_cameras_text(str(empty_model / 'cameras.txt'))
+        images = read_images_text(str(empty_model / 'images.txt'))
 
     db = COLMAPDatabase.connect(database_path)
     db.create_tables()
@@ -30,7 +77,8 @@ def create_db_from_model(empty_model, database_path):
             prior_focal_length=True)
 
     for i, image in images.items():
-        db.add_image(image.name, image.camera_id, image_id=i)
+        db.add_image(image.name, image.camera_id,
+             image_id=i, prior_q=image.qvec, prior_t=image.tvec)
 
     db.commit()
     db.close()
@@ -148,11 +196,11 @@ def run_triangulation(colmap_path, model_path, database_path, image_dir,
     return stats
 
 
-def main(sfm_dir, empty_sfm_model, image_dir, pairs, features, matches,
+def main(sfm_dir, reference_model, image_dir, pairs, features, matches,
          colmap_path='colmap', skip_geometric_verification=False,
          min_match_score=None):
 
-    assert empty_sfm_model.exists(), empty_sfm_model
+    assert reference_model.exists(), reference_model
     assert features.exists(), features
     assert pairs.exists(), pairs
     assert matches.exists(), matches
@@ -161,22 +209,24 @@ def main(sfm_dir, empty_sfm_model, image_dir, pairs, features, matches,
     database = sfm_dir / 'database.db'
     model = sfm_dir / 'model'
     model.mkdir(exist_ok=True)
+    empty_model = sfm_dir / 'empty'
 
-    image_ids = create_db_from_model(empty_sfm_model, database)
+    create_empty_model(reference_model, empty_model)
+    image_ids = create_db_from_model(empty_model, database)
     import_features(image_ids, database, features)
     import_matches(image_ids, database, pairs, matches,
                    min_match_score, skip_geometric_verification)
     if not skip_geometric_verification:
         geometric_verification(colmap_path, database, pairs)
     stats = run_triangulation(
-        colmap_path, model, database, image_dir, empty_sfm_model)
+        colmap_path, model, database, image_dir, empty_model)
     logging.info(f'Statistics:\n{pprint.pformat(stats)}')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--sfm_dir', type=Path, required=True)
-    parser.add_argument('--empty_sfm_model', type=Path, required=True)
+    parser.add_argument('--reference_model', type=Path, required=True)
     parser.add_argument('--image_dir', type=Path, required=True)
 
     parser.add_argument('--pairs', type=Path, required=True)

@@ -78,7 +78,8 @@ def create_db_from_model(empty_model, database_path):
 
     for i, image in images.items():
         db.add_image(image.name, image.camera_id,
-             image_id=i, prior_q=image.qvec, prior_t=image.tvec)
+            image_id=i, prior_q=image.qvec, prior_t=image.tvec)
+        #db.add_image(image.name, image.camera_id, image_id=i)
 
     db.commit()
     db.close()

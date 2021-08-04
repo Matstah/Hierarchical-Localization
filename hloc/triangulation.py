@@ -204,36 +204,20 @@ def run_triangulation(colmap_path, model_path, database_path, image_dir,
     return stats
 
 
-<<<<<<< HEAD
-def main(sfm_dir, reference_model, image_dir, pairs, features, matches,
-         colmap_path='colmap', skip_geometric_verification=False,
-         min_match_score=None):
-
-    assert reference_model.exists(), reference_model
-=======
 def main(sfm_dir, reference_sfm_model, image_dir, pairs, features, matches,
          colmap_path='colmap', skip_geometric_verification=False,
          min_match_score=None):
 
     assert reference_sfm_model.exists(), reference_sfm_model
->>>>>>> upstream/master
     assert features.exists(), features
     assert pairs.exists(), pairs
     assert matches.exists(), matches
 
     sfm_dir.mkdir(parents=True, exist_ok=True)
     database = sfm_dir / 'database.db'
-<<<<<<< HEAD
-    model = sfm_dir / 'model'
-    model.mkdir(exist_ok=True)
-    empty_model = sfm_dir / 'empty'
-
-    create_empty_model(reference_model, empty_model)
-=======
     empty_model = sfm_dir / 'empty'
 
     create_empty_model(reference_sfm_model, empty_model)
->>>>>>> upstream/master
     image_ids = create_db_from_model(empty_model, database)
     import_features(image_ids, database, features)
     import_matches(image_ids, database, pairs, matches,
@@ -241,12 +225,8 @@ def main(sfm_dir, reference_sfm_model, image_dir, pairs, features, matches,
     if not skip_geometric_verification:
         geometric_verification(colmap_path, database, pairs)
     stats = run_triangulation(
-<<<<<<< HEAD
-        colmap_path, model, database, image_dir, empty_model)
-=======
         colmap_path, sfm_dir, database, image_dir, empty_model)
 
->>>>>>> upstream/master
     logging.info(f'Statistics:\n{pprint.pformat(stats)}')
     shutil.rmtree(empty_model)
 
@@ -254,11 +234,7 @@ def main(sfm_dir, reference_sfm_model, image_dir, pairs, features, matches,
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--sfm_dir', type=Path, required=True)
-<<<<<<< HEAD
-    parser.add_argument('--reference_model', type=Path, required=True)
-=======
     parser.add_argument('--reference_sfm_model', type=Path, required=True)
->>>>>>> upstream/master
     parser.add_argument('--image_dir', type=Path, required=True)
 
     parser.add_argument('--pairs', type=Path, required=True)

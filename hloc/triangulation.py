@@ -10,14 +10,8 @@ import pprint
 import shutil
 
 from .utils.read_write_model import (
-<<<<<<< HEAD
-        Camera, read_cameras_binary, read_cameras_text, 
-        read_images_binary, read_images_text, CAMERA_MODEL_NAMES,
-         write_images_binary, write_points3d_binary, Image)
-=======
         read_cameras_binary, read_images_binary, CAMERA_MODEL_NAMES,
         write_points3D_binary, write_images_binary)
->>>>>>> upstream/master
 from .utils.database import COLMAPDatabase
 from .utils.parsers import names_to_pair
 

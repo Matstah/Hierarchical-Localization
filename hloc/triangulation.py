@@ -7,11 +7,17 @@ import h5py
 import numpy as np
 import subprocess
 import pprint
+import shutil
 
 from .utils.read_write_model import (
+<<<<<<< HEAD
         Camera, read_cameras_binary, read_cameras_text, 
         read_images_binary, read_images_text, CAMERA_MODEL_NAMES,
          write_images_binary, write_points3d_binary, Image)
+=======
+        read_cameras_binary, read_images_binary, CAMERA_MODEL_NAMES,
+        write_points3D_binary, write_images_binary)
+>>>>>>> upstream/master
 from .utils.database import COLMAPDatabase
 from .utils.parsers import names_to_pair
 
@@ -55,6 +61,19 @@ def create_empty_model(reference_model, empty_model):
         create_empty_model_from_text(reference_model, empty_model)
     else:
         create_empty_model_from_binary(reference_model, empty_model)
+
+def create_empty_model(reference_model, empty_model):
+    logging.info('Creating an empty model.')
+    empty_model.mkdir(exist_ok=True)
+    shutil.copy(reference_model / 'cameras.bin', empty_model)
+    write_points3D_binary(dict(), empty_model / 'points3D.bin')
+    images = read_images_binary(str(reference_model / 'images.bin'))
+    images_empty = dict()
+    for id_, image in images.items():
+        images_empty[id_] = image._replace(
+            xys=np.zeros((0, 2), float), point3D_ids=np.full(0, -1, int))
+    write_images_binary(images_empty, empty_model / 'images.bin')
+
 
 def create_db_from_model(empty_model, database_path):
     if database_path.exists():
@@ -106,7 +125,7 @@ def import_matches(image_ids, database_path, pairs_path, matches_path,
     logging.info('Importing matches into the database...')
 
     with open(str(pairs_path), 'r') as f:
-        pairs = [p.split(' ') for p in f.read().split('\n')]
+        pairs = [p.split() for p in f.readlines()]
 
     hfile = h5py.File(str(matches_path), 'r')
     db = COLMAPDatabase.connect(database_path)
@@ -116,14 +135,12 @@ def import_matches(image_ids, database_path, pairs_path, matches_path,
         id0, id1 = image_ids[name0], image_ids[name1]
         if len({(id0, id1), (id1, id0)} & matched) > 0:
             continue
-        pair0 = names_to_pair(name0, name1)
-        pair1 = names_to_pair(name0, name1)
-        if pair0 in hfile:
-            pair = pair0
-        elif pair1 in hfile:
-            pair = pair1
-        else:
-            raise ValueError(f'Could not find pair {(name0, name1)}')
+        pair = names_to_pair(name0, name1)
+        if pair not in hfile:
+            raise ValueError(
+                f'Could not find pair {(name0, name1)}... '
+                'Maybe you matched with a different list of pairs? '
+                f'Reverse in file: {names_to_pair(name0, name1) in hfile}.')
 
         matches = hfile[pair]['matches0'].__array__()
         valid = matches > -1
@@ -149,11 +166,10 @@ def geometric_verification(colmap_path, database_path, pairs_path):
         str(colmap_path), 'matches_importer',
         '--database_path', str(database_path),
         '--match_list_path', str(pairs_path),
-        '--match_type', 'pairs']
-    ret = subprocess.call(cmd)
-    if ret != 0:
-        logging.warning('Problem with matches_importer, exiting.')
-        exit(ret)
+        '--match_type', 'pairs',
+        '--SiftMatching.max_num_trials', str(20000),
+        '--SiftMatching.min_inlier_ratio', str(0.1)]
+    subprocess.run(cmd, check=True)
 
 
 def run_triangulation(colmap_path, model_path, database_path, image_dir,
@@ -171,10 +187,7 @@ def run_triangulation(colmap_path, model_path, database_path, image_dir,
         '--Mapper.ba_refine_principal_point', '0',
         '--Mapper.ba_refine_extra_params', '0']
     logging.info(' '.join(cmd))
-    ret = subprocess.call(cmd)
-    if ret != 0:
-        logging.warning('Problem with point_triangulator, exiting.')
-        exit(ret)
+    subprocess.run(cmd, check=True)
 
     stats_raw = subprocess.check_output(
         [str(colmap_path), 'model_analyzer', '--path', str(model_path)])
@@ -197,22 +210,36 @@ def run_triangulation(colmap_path, model_path, database_path, image_dir,
     return stats
 
 
+<<<<<<< HEAD
 def main(sfm_dir, reference_model, image_dir, pairs, features, matches,
          colmap_path='colmap', skip_geometric_verification=False,
          min_match_score=None):
 
     assert reference_model.exists(), reference_model
+=======
+def main(sfm_dir, reference_sfm_model, image_dir, pairs, features, matches,
+         colmap_path='colmap', skip_geometric_verification=False,
+         min_match_score=None):
+
+    assert reference_sfm_model.exists(), reference_sfm_model
+>>>>>>> upstream/master
     assert features.exists(), features
     assert pairs.exists(), pairs
     assert matches.exists(), matches
 
     sfm_dir.mkdir(parents=True, exist_ok=True)
     database = sfm_dir / 'database.db'
+<<<<<<< HEAD
     model = sfm_dir / 'model'
     model.mkdir(exist_ok=True)
     empty_model = sfm_dir / 'empty'
 
     create_empty_model(reference_model, empty_model)
+=======
+    empty_model = sfm_dir / 'empty'
+
+    create_empty_model(reference_sfm_model, empty_model)
+>>>>>>> upstream/master
     image_ids = create_db_from_model(empty_model, database)
     import_features(image_ids, database, features)
     import_matches(image_ids, database, pairs, matches,
@@ -220,14 +247,24 @@ def main(sfm_dir, reference_model, image_dir, pairs, features, matches,
     if not skip_geometric_verification:
         geometric_verification(colmap_path, database, pairs)
     stats = run_triangulation(
+<<<<<<< HEAD
         colmap_path, model, database, image_dir, empty_model)
+=======
+        colmap_path, sfm_dir, database, image_dir, empty_model)
+
+>>>>>>> upstream/master
     logging.info(f'Statistics:\n{pprint.pformat(stats)}')
+    shutil.rmtree(empty_model)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--sfm_dir', type=Path, required=True)
+<<<<<<< HEAD
     parser.add_argument('--reference_model', type=Path, required=True)
+=======
+    parser.add_argument('--reference_sfm_model', type=Path, required=True)
+>>>>>>> upstream/master
     parser.add_argument('--image_dir', type=Path, required=True)
 
     parser.add_argument('--pairs', type=Path, required=True)
